@@ -20,6 +20,7 @@ properties:
       - inanbo,t28cp45tn89-v17
       - jasonic,jt240mhqs-hwt-ek-e3
       - sitronix,st7789v
+      - waveshare,st7789vw-240x240
 
   reg:
     maxItems: 1

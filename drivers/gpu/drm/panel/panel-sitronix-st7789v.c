@@ -294,6 +294,20 @@ static const struct drm_display_mode jt240mhqs_hwt_ek_e3_mode = {
 	.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC,
 };
 
+static const struct drm_display_mode st7789vw_240x240_mode = {
+	.clock = 6000,
+	.hdisplay = 240,
+	.hsync_start = 240 + 10,
+	.hsync_end = 240 + 20,
+	.htotal = 240 + 30,
+	.vdisplay = 240,
+	.vsync_start = 240 + 10,
+	.vsync_end = 240 + 20,
+	.vtotal = 240 + 30,
+	.width_mm = 30,
+	.height_mm = 30,
+};
+
 static const struct st7789_panel_info default_panel = {
 	.mode = &default_mode,
 	.invert_mode = true,
@@ -327,6 +341,13 @@ static const struct st7789_panel_info jt240mhqs_hwt_ek_e3_panel = {
 	.partial_mode = true,
 	.partial_start = 38,
 	.partial_end = 318,
+};
+
+static const struct st7789_panel_info st7789vw_panel = {
+	.mode = &st7789vw_240x240_mode,
+	.invert_mode = false,
+	.bus_format = MEDIA_BUS_FMT_RGB565_1X16,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_SAMPLE_POSEDGE,
 };
 
 static int st7789v_get_modes(struct drm_panel *panel,
@@ -376,7 +397,7 @@ static int st7789v_prepare(struct drm_panel *panel)
 	struct st7789v *ctx = panel_to_st7789v(panel);
 	u8 mode, pixel_fmt, polarity;
 	int ret;
-
+	
 	if (!ctx->info->partial_mode)
 		mode = ST7789V_RGBCTRL_WO;
 	else
@@ -429,6 +450,7 @@ static int st7789v_prepare(struct drm_panel *panel)
 	/* We need to wait 120ms after a sleep out command */
 	msleep(120);
 
+
 	ST7789V_TEST(ret, st7789v_write_command(ctx,
 						MIPI_DCS_SET_ADDRESS_MODE));
 	ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
@@ -437,82 +459,84 @@ static int st7789v_prepare(struct drm_panel *panel)
 						MIPI_DCS_SET_PIXEL_FORMAT));
 	ST7789V_TEST(ret, st7789v_write_data(ctx, pixel_fmt));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PORCTRL_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PORCTRL_IDLE_BP(3) |
-					     ST7789V_PORCTRL_IDLE_FP(3)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx,
+	int is_vw = of_device_is_compatible(panel->dev->of_node, "waveshare,st7789vw-240x240");
+	if (!is_vw) {
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PORCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PORCTRL_IDLE_BP(3) |
+							 ST7789V_PORCTRL_IDLE_FP(3)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx,
 					     ST7789V_PORCTRL_PARTIAL_BP(3) |
 					     ST7789V_PORCTRL_PARTIAL_FP(3)));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_GCTRL_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_GCTRL_VGLS(5) |
-					     ST7789V_GCTRL_VGHS(3)));
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_GCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_GCTRL_VGLS(5) |
+							 ST7789V_GCTRL_VGHS(3)));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VCOMS_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, 0x2b));
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VCOMS_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x2b));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_LCMCTRL_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_LCMCTRL_XMH |
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_LCMCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_LCMCTRL_XMH |
 					     ST7789V_LCMCTRL_XMX |
 					     ST7789V_LCMCTRL_XBGR));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VDVVRHEN_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_VDVVRHEN_CMDEN));
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VDVVRHEN_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_VDVVRHEN_CMDEN));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VRHS_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, 0xf));
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VRHS_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xf));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VDVS_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, 0x20));
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VDVS_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x20));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_FRCTRL2_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, 0xf));
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_FRCTRL2_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xf));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PWCTRL1_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PWCTRL1_MAGIC));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PWCTRL1_AVDD(2) |
-					     ST7789V_PWCTRL1_AVCL(2) |
-					     ST7789V_PWCTRL1_VDS(1)));
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PWCTRL1_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PWCTRL1_MAGIC));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PWCTRL1_AVDD(2) |
+							 ST7789V_PWCTRL1_AVCL(2) |
+							 ST7789V_PWCTRL1_VDS(1)));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PVGAMCTRL_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP63(0xd)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP1(0xca)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP2(0xe)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP4(8)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP6(9)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP13(7)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP20(0x2d)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP27(0xb) |
-					     ST7789V_PVGAMCTRL_VP36(3)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP43(0x3d)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_JP1(3) |
-					     ST7789V_PVGAMCTRL_VP50(4)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP57(0xa)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP59(0xa)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP61(0x1b)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP62(0x28)));
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PVGAMCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP63(0xd)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP1(0xca)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP2(0xe)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP4(8)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP6(9)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP13(7)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP20(0x2d)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP27(0xb) |
+							 ST7789V_PVGAMCTRL_VP36(3)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP43(0x3d)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_JP1(3) |
+							 ST7789V_PVGAMCTRL_VP50(4)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP57(0xa)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP59(0xa)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP61(0x1b)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP62(0x28)));
 
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_NVGAMCTRL_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN63(0xd)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN1(0xca)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN2(0xf)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN4(8)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN6(8)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN13(7)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN20(0x2e)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN27(0xc) |
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_NVGAMCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN63(0xd)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN1(0xca)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN2(0xf)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN4(8)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN6(8)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN13(7)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN20(0x2e)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN27(0xc) |
 					     ST7789V_NVGAMCTRL_VN36(5)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN43(0x40)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_JN1(3) |
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN43(0x40)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_JN1(3) |
 					     ST7789V_NVGAMCTRL_VN50(4)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN57(9)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN59(0xb)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN61(0x1b)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN62(0x28)));
-
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN57(9)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN59(0xb)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN61(0x1b)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN62(0x28)));
+	}
 	if (ctx->info->invert_mode) {
 		ST7789V_TEST(ret, st7789v_write_command(ctx,
 						MIPI_DCS_ENTER_INVERT_MODE));
@@ -674,6 +698,10 @@ static const struct of_device_id st7789v_of_match[] = {
 	{ .compatible = "edt,et028013dma", .data = &et028013dma_panel },
 	{ .compatible = "jasonic,jt240mhqs-hwt-ek-e3",
 	  .data = &jt240mhqs_hwt_ek_e3_panel },
+	{
+	  .compatible = "waveshare,st7789vw-240x240",
+	  .data = &st7789vw_panel
+	},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, st7789v_of_match);
