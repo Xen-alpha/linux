@@ -303,6 +303,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	sunfounder-pipower3.dtbo \
 	sunfounder-pironman5.dtbo \
 	superaudioboard.dtbo \
+	st7789vw-drm-spi.dtbo \
 	sx150x.dtbo \
 	tc358743.dtbo \
 	tc358743-audio.dtbo \

@@ -121,6 +121,11 @@ struct st7789_panel_info {
 	bool partial_mode;
 	u16 partial_start;
 	u16 partial_end;
+
+	u16 col_offset;
+	u16 row_offset;
+	u8 *gamma_pos;
+	u8 *gamma_neg;
 };
 
 struct st7789v {
@@ -232,6 +237,23 @@ static int st7789v_check_id(struct drm_panel *panel)
 		return -EIO;
 
 	return 0;
+}
+
+static void st7789v_write_gamma(struct st7789v *ctx)
+{
+	int i;
+
+	if (ctx->info->gamma_pos) {
+		st7789v_write_command(ctx, ST7789V_PVGAMCTRL_CMD);
+		for (i = 0; i < 14; i++)
+			st7789v_write_data(ctx, ctx->info->gamma_pos[i]);
+	}
+
+	if (ctx->info->gamma_neg) {
+		st7789v_write_command(ctx, ST7789V_NVGAMCTRL_CMD);
+		for (i = 0; i< 14; i++)
+			st7789v_write_data(ctx, ctx->info->gamma_neg[i]);
+	}
 }
 
 static const struct drm_display_mode default_mode = {
@@ -455,11 +477,30 @@ static int st7789v_prepare(struct drm_panel *panel)
 						MIPI_DCS_SET_ADDRESS_MODE));
 	ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
 
+	bool is_vw = device_is_compatible(panel->dev, "waveshare,st7789vw-240x240");
+
+	u16 x0 = ctx->info->col_offset;
+	u16 x1 = x0 + ctx->info->mode->hdisplay - 1;
+	u16 y0 = ctx->info->row_offset;
+	u16 y1 = y0 + ctx->info->mode->vdisplay - 1;
+	if (is_vw) {
+		ST7789V_TEST(ret, st7789v_write_command(ctx, MIPI_DCS_SET_COLUMN_ADDRESS));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, (x0 >> 8) & 0xff));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, x0 & 0xff ));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, (x1 >> 8) && 0xff));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, x1 & 0xff ));
+		
+		ST7789V_TEST(ret, st7789v_write_command(ctx, MIPI_DCS_SET_PAGE_ADDRESS));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, (y0 >> 8) & 0xff ));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, y0 & 0xff ));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, (y1 >> 8) & 0xff ));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, y1 & 0xff ));
+	}
+
 	ST7789V_TEST(ret, st7789v_write_command(ctx,
 						MIPI_DCS_SET_PIXEL_FORMAT));
 	ST7789V_TEST(ret, st7789v_write_data(ctx, pixel_fmt));
 
-	int is_vw = of_device_is_compatible(panel->dev->of_node, "waveshare,st7789vw-240x240");
 	if (!is_vw) {
 		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PORCTRL_CMD));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
@@ -536,6 +577,8 @@ static int st7789v_prepare(struct drm_panel *panel)
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN59(0xb)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN61(0x1b)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN62(0x28)));
+	} else {
+		st7789v_write_gamma(ctx); // just write gamma values for st7789vw
 	}
 	if (ctx->info->invert_mode) {
 		ST7789V_TEST(ret, st7789v_write_command(ctx,
@@ -632,7 +675,7 @@ static const struct drm_panel_funcs st7789v_drm_funcs = {
 
 static int st7789v_probe(struct spi_device *spi)
 {
-	struct device *dev = &spi->dev;
+	struct device *dev = &spi->dev
 	struct st7789v *ctx;
 	int ret;
 
@@ -670,6 +713,22 @@ static int st7789v_probe(struct spi_device *spi)
 	ret = of_drm_get_panel_orientation(spi->dev.of_node, &ctx->orientation);
 	if (ret)
 		return dev_err_probe(&spi->dev, ret, "Failed to get orientation\n");
+	/* read optional offset values*/
+	ret = device_property_read_u16(dev, "sitronix,col-offset", &ctx->info->col_offset);
+	if (!ret)
+		return dev_err_probe(&spi->dev, ret, "Failed to get column offset\n");
+
+	ret = device_property_read_u16(dev, "sitronix,row-offset", &ctx->info->row_offset);
+	if (!ret)
+		return dev_err_probe(&spi->dev, ret, "Failed to get row offset\n");
+
+	ret = device_property_read_u8_array(dev, "sitronix,gamma-positive", ctx->info->gamma_pos, 14);
+	if(!ret)
+		dev_warn(&spi->dev, "gamma-positive length must be 14 bytes\n");
+
+	ret = device_property_read_u8_array(dev, "sitronix, gamma-negative", ctx->info->gamma_neg, 14);
+	if(!ret)
+		dev_warn(&spi->dev, "gamma-negative length must be 14 bytes\n");
 
 	drm_panel_add(&ctx->panel);
 
@@ -688,6 +747,7 @@ static const struct spi_device_id st7789v_spi_id[] = {
 	{ "t28cp45tn89-v17", (unsigned long) &t28cp45tn89_panel },
 	{ "et028013dma", (unsigned long) &et028013dma_panel },
 	{ "jt240mhqs-hwt-ek-e3", (unsigned long) &jt240mhqs_hwt_ek_e3_panel },
+	{ "st7789vw-240x240", (unsigned long) &st7789vw_panel },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, st7789v_spi_id);
