@@ -535,7 +535,7 @@ static int st7789v_prepare(struct drm_panel *panel)
 		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x03));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x00));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3f));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3f)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3f));
 		
 		/* Negative gamma control */
 		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_NVGAMCTRL_CMD));
@@ -687,7 +687,7 @@ static const struct drm_panel_funcs st7789v_drm_funcs = {
 
 static int st7789v_probe(struct spi_device *spi)
 {
-	struct device *dev = &spi->dev
+	struct device *dev = &spi->dev;
 	struct st7789v *ctx;
 	int ret;
 
