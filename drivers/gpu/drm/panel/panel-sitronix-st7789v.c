@@ -239,23 +239,6 @@ static int st7789v_check_id(struct drm_panel *panel)
 	return 0;
 }
 
-static void st7789v_write_gamma(struct st7789v *ctx)
-{
-	int i;
-
-	if (ctx->info->gamma_pos) {
-		st7789v_write_command(ctx, ST7789V_PVGAMCTRL_CMD);
-		for (i = 0; i < 14; i++)
-			st7789v_write_data(ctx, ctx->info->gamma_pos[i]);
-	}
-
-	if (ctx->info->gamma_neg) {
-		st7789v_write_command(ctx, ST7789V_NVGAMCTRL_CMD);
-		for (i = 0; i< 14; i++)
-			st7789v_write_data(ctx, ctx->info->gamma_neg[i]);
-	}
-}
-
 static const struct drm_display_mode default_mode = {
 	.clock = 7000,
 	.hdisplay = 240,
@@ -368,7 +351,7 @@ static const struct st7789_panel_info jt240mhqs_hwt_ek_e3_panel = {
 static const struct st7789_panel_info st7789vw_panel = {
 	.mode = &st7789vw_240x240_mode,
 	.invert_mode = false,
-	.bus_format = MEDIA_BUS_FMT_RGB565_1X16,
+	.bus_format = MIPI_DCS_PIXEL_FMT_16BIT,
 	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_SAMPLE_POSEDGE,
 };
 
@@ -472,76 +455,105 @@ static int st7789v_prepare(struct drm_panel *panel)
 	/* We need to wait 120ms after a sleep out command */
 	msleep(120);
 
-
-	ST7789V_TEST(ret, st7789v_write_command(ctx,
-						MIPI_DCS_SET_ADDRESS_MODE));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
-
 	bool is_vw = device_is_compatible(panel->dev, "waveshare,st7789vw-240x240");
 
-	u16 x0 = ctx->info->col_offset;
-	u16 x1 = x0 + ctx->info->mode->hdisplay - 1;
-	u16 y0 = ctx->info->row_offset;
-	u16 y1 = y0 + ctx->info->mode->vdisplay - 1;
-	if (is_vw) {
-		ST7789V_TEST(ret, st7789v_write_command(ctx, MIPI_DCS_SET_COLUMN_ADDRESS));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, (x0 >> 8) & 0xff));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, x0 & 0xff ));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, (x1 >> 8) && 0xff));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, x1 & 0xff ));
-		
-		ST7789V_TEST(ret, st7789v_write_command(ctx, MIPI_DCS_SET_PAGE_ADDRESS));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, (y0 >> 8) & 0xff ));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, y0 & 0xff ));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, (y1 >> 8) & 0xff ));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, y1 & 0xff ));
-	}
-
+	/* ST7789VW should write 0x70 instead of writing 0. */
+	ST7789V_TEST(ret, st7789v_write_command(ctx,
+						MIPI_DCS_SET_ADDRESS_MODE));
+	if (is_vw)
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x70));
+	else
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
+	/* Set Pixel Format */
 	ST7789V_TEST(ret, st7789v_write_command(ctx,
 						MIPI_DCS_SET_PIXEL_FORMAT));
 	ST7789V_TEST(ret, st7789v_write_data(ctx, pixel_fmt));
+	
+	/* Porch control */
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PORCTRL_CMD));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PORCTRL_IDLE_BP(3) |
+						 ST7789V_PORCTRL_IDLE_FP(3)));
+	ST7789V_TEST(ret, st7789v_write_data(ctx,
+				     ST7789V_PORCTRL_PARTIAL_BP(3) |
+				     ST7789V_PORCTRL_PARTIAL_FP(3)));
+	/* Gate control : Write 0x35 */
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_GCTRL_CMD));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_GCTRL_VGLS(5) |
+						 ST7789V_GCTRL_VGHS(3)));
 
-	if (!is_vw) {
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PORCTRL_CMD));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xc));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PORCTRL_IDLE_BP(3) |
-							 ST7789V_PORCTRL_IDLE_FP(3)));
-		ST7789V_TEST(ret, st7789v_write_data(ctx,
-					     ST7789V_PORCTRL_PARTIAL_BP(3) |
-					     ST7789V_PORCTRL_PARTIAL_FP(3)));
-
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_GCTRL_CMD));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_GCTRL_VGLS(5) |
-							 ST7789V_GCTRL_VGHS(3)));
-
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VCOMS_CMD));
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VCOMS_CMD));
+	if (is_vw)
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x1a));
+	else
 		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x2b));
 
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_LCMCTRL_CMD));
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_LCMCTRL_CMD));
+	if (is_vw)
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x2c));
+	else
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_LCMCTRL_XMH |
-					     ST7789V_LCMCTRL_XMX |
-					     ST7789V_LCMCTRL_XBGR));
+				     ST7789V_LCMCTRL_XMX |
+				     ST7789V_LCMCTRL_XBGR));
 
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VDVVRHEN_CMD));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_VDVVRHEN_CMDEN));
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VDVVRHEN_CMD));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_VDVVRHEN_CMDEN));
 
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VRHS_CMD));
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VRHS_CMD));
+	if (is_vw)
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xb));
+	else
 		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xf));
 
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VDVS_CMD));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x20));
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_VDVS_CMD));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, 0x20));
 
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_FRCTRL2_CMD));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, 0xf));
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_FRCTRL2_CMD));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, 0xf));
 
-		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PWCTRL1_CMD));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PWCTRL1_MAGIC));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PWCTRL1_AVDD(2) |
-							 ST7789V_PWCTRL1_AVCL(2) |
-							 ST7789V_PWCTRL1_VDS(1)));
-
+	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PWCTRL1_CMD));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PWCTRL1_MAGIC));
+	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PWCTRL1_AVDD(2) |
+						 ST7789V_PWCTRL1_AVCL(2) |
+						 ST7789V_PWCTRL1_VDS(1)));
+	
+	/* Positive gamma control */
+	if (is_vw) {
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PVGAMCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x19));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x1e));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x0a));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x09));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x15));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3d));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x44));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x51));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x12));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x03));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x00));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3f));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3f)));
+		
+		/* Negative gamma control */
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_NVGAMCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x00));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x18));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x1e));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x0a));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x09));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x25));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3f));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x43));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x52));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x33));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x03));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x00));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3f));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, 0x3f));
+	} else {
 		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_PVGAMCTRL_CMD));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP63(0xd)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP1(0xca)));
@@ -559,7 +571,8 @@ static int st7789v_prepare(struct drm_panel *panel)
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP59(0xa)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP61(0x1b)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_PVGAMCTRL_VP62(0x28)));
-
+		
+		/* Negative gamma control */
 		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_NVGAMCTRL_CMD));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN63(0xd)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN1(0xca)));
@@ -569,69 +582,68 @@ static int st7789v_prepare(struct drm_panel *panel)
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN13(7)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN20(0x2e)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN27(0xc) |
-					     ST7789V_NVGAMCTRL_VN36(5)));
+						 ST7789V_NVGAMCTRL_VN36(5)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN43(0x40)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_JN1(3) |
-					     ST7789V_NVGAMCTRL_VN50(4)));
+						 ST7789V_NVGAMCTRL_VN50(4)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN57(9)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN59(0xb)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN61(0x1b)));
 		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_NVGAMCTRL_VN62(0x28)));
-	} else {
-		st7789v_write_gamma(ctx); // just write gamma values for st7789vw
 	}
-	if (ctx->info->invert_mode) {
-		ST7789V_TEST(ret, st7789v_write_command(ctx,
-						MIPI_DCS_ENTER_INVERT_MODE));
-	} else {
-		ST7789V_TEST(ret, st7789v_write_command(ctx,
-						MIPI_DCS_EXIT_INVERT_MODE));
+	if (!is_vw) {
+		if (ctx->info->invert_mode) {
+			ST7789V_TEST(ret, st7789v_write_command(ctx,
+							MIPI_DCS_ENTER_INVERT_MODE));
+		} else {
+			ST7789V_TEST(ret, st7789v_write_command(ctx,
+							MIPI_DCS_EXIT_INVERT_MODE));
+		}
+
+		if (ctx->info->partial_mode) {
+			u8 area_data[4] = {
+				(ctx->info->partial_start >> 8) & 0xff,
+				(ctx->info->partial_start >> 0) & 0xff,
+				((ctx->info->partial_end - 1) >> 8) & 0xff,
+				((ctx->info->partial_end - 1) >> 0) & 0xff,
+			};
+
+			/* Caution: if userspace ever pushes a mode different from the
+			 * expected one (i.e., the one advertised by get_modes), we'll
+			 * add margins.
+			 */
+
+			ST7789V_TEST(ret, st7789v_write_command(
+						  ctx, MIPI_DCS_ENTER_PARTIAL_MODE));
+
+			ST7789V_TEST(ret, st7789v_write_command(
+						  ctx, MIPI_DCS_SET_PAGE_ADDRESS));
+			ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[0]));
+			ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[1]));
+			ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[2]));
+			ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[3]));
+
+			ST7789V_TEST(ret, st7789v_write_command(
+						  ctx, MIPI_DCS_SET_PARTIAL_ROWS));
+			ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[0]));
+			ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[1]));
+			ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[2]));
+			ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[3]));
+		}
+
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_RAMCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_RAMCTRL_DM_RGB |
+							 ST7789V_RAMCTRL_RM_RGB));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_RAMCTRL_EPF(3) |
+							 ST7789V_RAMCTRL_MAGIC));
+
+		ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_RGBCTRL_CMD));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, mode |
+							 ST7789V_RGBCTRL_RCM(2) |
+							 polarity));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_RGBCTRL_VBP(8)));
+		ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_RGBCTRL_HBP(20)));
 	}
-
-	if (ctx->info->partial_mode) {
-		u8 area_data[4] = {
-			(ctx->info->partial_start >> 8) & 0xff,
-			(ctx->info->partial_start >> 0) & 0xff,
-			((ctx->info->partial_end - 1) >> 8) & 0xff,
-			((ctx->info->partial_end - 1) >> 0) & 0xff,
-		};
-
-		/* Caution: if userspace ever pushes a mode different from the
-		 * expected one (i.e., the one advertised by get_modes), we'll
-		 * add margins.
-		 */
-
-		ST7789V_TEST(ret, st7789v_write_command(
-					  ctx, MIPI_DCS_ENTER_PARTIAL_MODE));
-
-		ST7789V_TEST(ret, st7789v_write_command(
-					  ctx, MIPI_DCS_SET_PAGE_ADDRESS));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[0]));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[1]));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[2]));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[3]));
-
-		ST7789V_TEST(ret, st7789v_write_command(
-					  ctx, MIPI_DCS_SET_PARTIAL_ROWS));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[0]));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[1]));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[2]));
-		ST7789V_TEST(ret, st7789v_write_data(ctx, area_data[3]));
-	}
-
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_RAMCTRL_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_RAMCTRL_DM_RGB |
-					     ST7789V_RAMCTRL_RM_RGB));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_RAMCTRL_EPF(3) |
-					     ST7789V_RAMCTRL_MAGIC));
-
-	ST7789V_TEST(ret, st7789v_write_command(ctx, ST7789V_RGBCTRL_CMD));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, mode |
-					     ST7789V_RGBCTRL_RCM(2) |
-					     polarity));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_RGBCTRL_VBP(8)));
-	ST7789V_TEST(ret, st7789v_write_data(ctx, ST7789V_RGBCTRL_HBP(20)));
-
 	return 0;
 }
 
