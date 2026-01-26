@@ -134,6 +134,7 @@ struct st7789v {
 	struct spi_device *spi;
 	struct gpio_desc *reset;
 	struct regulator *power;
+	struct gpio_desc *dc;
 	enum drm_panel_orientation orientation;
 };
 
@@ -151,7 +152,7 @@ static int st7789v_spi_write(struct st7789v *ctx, enum st7789v_prefix prefix,
 			     u8 data)
 {
 	struct spi_transfer xfer = { };
-	u16 txbuf = ((prefix & 1) << 8) | data;
+	u16 txbuf = data; // no prefix in rpi
 
 	xfer.tx_buf = &txbuf;
 	xfer.len = sizeof(txbuf);
@@ -161,11 +162,13 @@ static int st7789v_spi_write(struct st7789v *ctx, enum st7789v_prefix prefix,
 
 static int st7789v_write_command(struct st7789v *ctx, u8 cmd)
 {
+	gpiod_set_value(ctx->dc, ST7789V_COMMAND); // seperated dc selection
 	return st7789v_spi_write(ctx, ST7789V_COMMAND, cmd);
 }
 
 static int st7789v_write_data(struct st7789v *ctx, u8 cmd)
 {
+	gpiod_set_value(ctx->dc, ST7789V_DATA); // seperated dc selection
 	return st7789v_spi_write(ctx, ST7789V_DATA, cmd);
 }
 
@@ -698,7 +701,7 @@ static int st7789v_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, ctx);
 	ctx->spi = spi;
 
-	spi->bits_per_word = 9;
+	spi->bits_per_word = 8; // no prefix bit in rpi
 	ret = spi_setup(spi);
 	if (ret < 0)
 		return dev_err_probe(&spi->dev, ret, "Failed to setup spi\n");
@@ -717,6 +720,11 @@ static int st7789v_probe(struct spi_device *spi)
 	ret = PTR_ERR_OR_ZERO(ctx->reset);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get reset line\n");
+	
+	ctx->dc = devm_gpiod_get_optional(dev, "dc-gpios", GPIOD_OUT_HIGH);
+	ret = PTR_ERR_OR_ZERO(ctx->dc);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to get dc line\n");
 
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
