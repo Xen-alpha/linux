@@ -1,53 +1,22 @@
 /dts-v1/;
 /plugin/;
-
 #include <dt-bindings/gpio/gpio.h>
 
 / {
-	compatible = "brcm,brcm2835";
-	fragment@0 {
-		target = <&spidev0>;
-		__overlay__ {
-			status = "disabled";
-		};
-	};
-	fragment@1 {
-		target = <&spi0>;
-		__overlay__ {
-			status = "okay";
-			#address-cells = <1>;
-			#size-cells = <0>;
-			panel@0 {
-				compatible = "waveshare,st7789vw-240x240";
-				reg = <0>;
-				spi-max-frequency = <40000000>;
-				spi-cpol;
-				spi-cpha;
-				dc-gpios = <&gpio 25 GPIO_ACTIVE_HIGH>;
-				reset-gpios = <&gpio 27 GPIO_ACTIVE_LOW>;
-				power-supply = <&panel_3v3>;
-				backlight = <&panel_backlight>;
-				orientation = <0>;
-				sitronix,col-offset = <0>;
-				sitronix,row-offset = <80>;
-			};
-		};
-	};
-	fragment@2 {
-		target-path = "/";
-		__overlay__ {
-			panel_3v3: regulator-panel {
-				compatible = "regulator-fixed";
-				regulator-name = "panel-3v3";
-				regulator-min-microvolt = <3300000>;
-				regulator-max-microvolt = <3300000>;
-				regulator-always-on;
-			};
-			panel_backlight: backlight {
-				compatible = "gpio-backlight";
-				gpios = <&gpio 24 GPIO_ACTIVE_HIGH>;
-				default-on;
-			};
+	compatible="brcm,brcm2835";
+	spi@7e204000 {
+		status = "okay";
+		
+		#address-cells = <1>;
+		#size-cells = <0>;
+		
+		lcd@0 {
+			compatible = "waveshare,st7789vw";
+			reg = <0>;
+			spi-max-frequency = <40000000>;
+			dc-gpios = <&gpio 25 GPIO_ACTIVE_HIGH>;
+			reset-gpios = <&gpio 27 GPIO_ACTIVE_LOW>;
+			orientation = <0>;
 		};
 	};
 };

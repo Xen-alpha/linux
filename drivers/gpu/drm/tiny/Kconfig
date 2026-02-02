@@ -213,3 +213,12 @@ config TINYDRM_ST7735R
 	  * Okaya RH128128T 1.44" 128x128 TFT
 
 	  If M is selected the module will be called st7735r.
+
+config TINYDRM_ST7789VW
+	tristate "DRM support for Sitronix ST7789VW display panels"
+	depends on DRM && SPI
+	select DRM_TINYDRM
+	help
+	  DRM driver for Sitronix ST7789vw with the following panel
+	  LCDs:
+	  * Waveshare 1.3" 240x240 TFT LCD HAT
