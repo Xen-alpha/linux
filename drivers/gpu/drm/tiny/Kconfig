@@ -217,7 +217,10 @@ config TINYDRM_ST7735R
 config TINYDRM_ST7789VW
 	tristate "DRM support for Sitronix ST7789VW display panels"
 	depends on DRM && SPI
-	select DRM_TINYDRM
+	select DRM_KMS_HELPER
+	select DRM_GEM_DMA_HELPER
+	select DRM_MIPI_DBI
+	select DRM_BACKLIGHT_CLASS_DEVICE
 	help
 	  DRM driver for Sitronix ST7789vw with the following panel
 	  LCDs:

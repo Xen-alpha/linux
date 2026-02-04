@@ -60,51 +60,48 @@
 #define ST7789V_PWCTRL1_VDS(n)			((n) & 3)
 
 struct st7789v_cfg {
-	struct drm_display_mode mode;
-};
-
-struct st7789v_priv {
 	struct mipi_dbi_dev dbidev;	/* Must be first for .release() */
-	const struct st7789v_cfg *cfg;
+	struct drm_display_mode mode;
 };
 
 static const struct drm_display_mode st7789vw_mode = {
 	.clock = 6000,
 	.hdisplay = 240,
-	.hsync_start = 240,
-	.hsync_end = 240,
-	.htotal = 240,
+	.hsync_start = 240 + 10,
+	.hsync_end = 240 + 20,
+	.htotal = 240 + 30,
 	.vdisplay = 240,
-	.vsync_start = 240,
-	.vsync_end = 240,
-	.vtotal = 240,
+	.vsync_start = 240 + 10,
+	.vsync_end = 240 + 20,
+	.vtotal = 240 + 30,
+	.width_mm = 30,
+	.height_mm = 30,
 	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
 };
 
-enum st7789v_prefix {
-	ST7789V_COMMAND = 0,
-	ST7789V_DATA = 1,
-};
 
-
-/* TODO: use mipi_dbi_...() to implement codes below */
 static void st7789v_enable(struct drm_simple_display_pipe *pipe,
 				struct drm_crtc_state *crtc_state,
 				struct drm_plane_state *plane_state)
 {
 	struct mipi_dbi_dev *dbidev = drm_to_mipi_dbi_dev(pipe->crtc.dev);
-	struct st7789v_priv *priv = container_of(dbidev, struct st7789v_priv,
+	struct st7789v_cfg *priv = container_of(dbidev, struct st7789v_cfg,
 						 dbidev);
 	struct mipi_dbi *dbi = &dbidev->dbi;
 	int ret, idx;
 	
-	if (!drm_dev_enter(pipe->crtc.dev, &idx))
+	pr_info("enabling st7789v...\n");
+	
+	if (!drm_dev_enter(pipe->crtc.dev, &idx)) {
+		pr_err("cannot enter drm device for st7789v\n");
 		return;
+	}
 
 	DRM_DEBUG_KMS("\n");
 	
 	ret = mipi_dbi_poweron_reset(dbidev);
 	if (ret) {
+		pr_err("cannot reset st7789v to enable\n");
 		drm_dev_exit(idx);
 		return;
 	}
@@ -116,7 +113,10 @@ static void st7789v_enable(struct drm_simple_display_pipe *pipe,
 	msleep(120); // sleep for 120ms
 	
 	bool is_vw = device_is_compatible(dbidev->drm.dev, "waveshare,st7789vw");
-
+	
+	if (is_vw)
+		pr_info("st7789vw waveshare variant detected\n");
+	
 	/* ST7789VW should write 0x70 instead of writing 0. */
 	if (is_vw)
 		mipi_dbi_command(dbi, MIPI_DCS_SET_ADDRESS_MODE, 0x70);
@@ -169,24 +169,22 @@ static void st7789v_enable(struct drm_simple_display_pipe *pipe,
 	mipi_dbi_command(dbi, MIPI_DCS_SET_DISPLAY_ON);
 
 	msleep(100);
-	/*
-	mipi_dbi_command(dbi, MIPI_DCS_ENTER_NORMAL_MODE);
-
-	msleep(20);
 
 	mipi_dbi_enable_flush(dbidev, crtc_state, plane_state);
-	*/
+	
+	pr_info("enabled st7789v display drm\n");
 }
 
 static void st7789v_disable(struct drm_simple_display_pipe *pipe) {
 	struct mipi_dbi_dev *dbidev = drm_to_mipi_dbi_dev(pipe->crtc.dev);
+	pr_info("disabling st7789v drm...\n");
 	mipi_dbi_command(&dbidev->dbi, MIPI_DCS_SET_DISPLAY_OFF);
 }
 
 static const struct drm_simple_display_pipe_funcs st7789v_pipe_funcs = {
 	.enable = st7789v_enable,
-	.update = mipi_dbi_pipe_update,
 	.disable = st7789v_disable,
+	.update = mipi_dbi_pipe_update,
 };
 
 DEFINE_DRM_GEM_DMA_FOPS(st7789v_fops);
@@ -203,33 +201,34 @@ static const struct drm_driver st7789v_driver = {
 	.minor			= 0,
 };
 static const struct of_device_id st7789v_of_match[] = {
-	{ .compatible = "waveshare,st7789vw-240x240" },
+	{ .compatible = "waveshare,st7789vw" },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, st7789v_of_match);
 
+static const struct spi_device_id st7789v_id[] = {
+	{ "st7789vw", 0 },
+	{ }
+};
+MODULE_DEVICE_TABLE(spi, st7789v_id);
+
 static int st7789v_probe(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
-	const struct st7789v_cfg *cfg;
+	struct st7789v_cfg *cfg;
 	struct mipi_dbi_dev *dbidev;
-	struct st7789v_priv *priv;
 	struct drm_device *drm;
 	struct mipi_dbi *dbi;
 	struct gpio_desc *dc;
 	int ret;
-
-	cfg = device_get_match_data(&spi->dev);
-	if (!cfg)
-		cfg = (void *)spi_get_device_id(spi)->driver_data;
+	u32 rotation = 0;
 	
-	priv = devm_drm_dev_alloc(dev, &st7789v_driver,
-				  struct st7789v_priv, dbidev.drm);
-	if (IS_ERR(priv))
-		return PTR_ERR(priv);
 
-	dbidev = &priv->dbidev;
-	priv->cfg = cfg;
+	cfg = devm_kzalloc(dev, sizeof(*cfg), GFP_KERNEL);
+	if (IS_ERR(cfg))
+		return dev_err_probe(dev, PTR_ERR(cfg), "Failed to get memory area for st7789v context\n");
+
+	dbidev = &cfg->dbidev;
 
 	dbi = &dbidev->dbi;
 	drm = &dbidev->drm;
@@ -246,27 +245,36 @@ static int st7789v_probe(struct spi_device *spi)
 	if (IS_ERR(dbidev->backlight))
 		return PTR_ERR(dbidev->backlight);
 	
-	ret = mipi_dbi_spi_init(spi, dbi, dc);
+	device_property_read_u32(dev, "rotation", &rotation);
+	cfg->dbidev.rotation = rotation;
+	
+	// pr_info("st7789v: cfg=%p\n", cfg);
+	// pr_info("st7789v: spi=%p\n", spi);
+
+	ret = mipi_dbi_spi_init(spi, dbi, NULL);
 	if (ret)
-		return ret;
+		return dev_err_probe(dev, ret, "Failed to init mipi spi for st7789v\n");
 	
-	dbidev->rotation = DRM_MODE_ROTATE_0;
+	cfg->mode = st7789vw_mode; // TODO: use switch statement to select display mode for other lcd controllers
 	
-	ret = mipi_dbi_dev_init(dbidev, &st7789v_pipe_funcs, &st7789vw_mode,
+	//pr_info("st7789v: return value of mipi_dbi_spi_init=%d\n", ret);
+	pr_info("st7789v: dbidev.drm.dev=%p\n", cfg->dbidev.drm.dev);
+	pr_info("st7789v: dbidev.dbi.spi=%p\n", cfg->dbidev.dbi.spi);
+
+
+	ret = mipi_dbi_dev_init(dbidev, &st7789v_pipe_funcs, &cfg->mode,
 				DRM_FORMAT_RGB565);
 	if (ret)
-		return ret;
+		return dev_err_probe(dev, ret, "Failed to init mipi device st7789v\n");
 
-	drm_mode_config_reset(drm);
 
 	ret = drm_dev_register(drm, 0);
 	if (ret)
-		return ret;
+		return dev_err_probe(dev, ret, "Failed to register st7789v drm device\n");
 
 	spi_set_drvdata(spi, drm);
 
-	drm_fbdev_dma_setup(drm, 0);
-
+	pr_info("st7789v probe finished\n");
 	return 0;
 	
 }
@@ -289,6 +297,7 @@ static struct spi_driver st7789v_spi_driver = {
 		.name = "st7789v",
 		.of_match_table = st7789v_of_match,
 	},
+	.id_table = st7789v_id,
 	.probe = st7789v_probe,
 	.remove = st7789v_remove,
 	.shutdown = st7789v_shutdown,

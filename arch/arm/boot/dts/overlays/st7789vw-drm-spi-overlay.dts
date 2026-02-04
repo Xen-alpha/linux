@@ -4,19 +4,60 @@
 
 / {
 	compatible="brcm,brcm2835";
-	spi@7e204000 {
-		status = "okay";
-		
-		#address-cells = <1>;
-		#size-cells = <0>;
-		
-		lcd@0 {
-			compatible = "waveshare,st7789vw";
-			reg = <0>;
-			spi-max-frequency = <40000000>;
-			dc-gpios = <&gpio 25 GPIO_ACTIVE_HIGH>;
-			reset-gpios = <&gpio 27 GPIO_ACTIVE_LOW>;
-			orientation = <0>;
+	
+	fragment@0 {
+		target = <&spidev0>;
+		__overlay__ {
+			status = "disabled";
 		};
 	};
+	
+	fragment@1 {
+		target = <&spi0>;
+		__overlay__ {
+			status = "okay";
+			
+			#address-cells = <1>;
+			#size-cells = <0>;
+			
+			lcd@0 {
+				compatible = "waveshare,st7789vw";
+				reg = <0>;
+				
+				spi-max-frequency = <32000000>;
+				rotation = <0>;
+				power-supply = <&vdd_3v3>;
+				
+				dc-gpios = <&gpio 25 GPIO_ACTIVE_HIGH>;
+				reset-gpios = <&gpio 27 GPIO_ACTIVE_LOW>;
+				backlight = <&backlight_gpio>;
+				
+			};
+		};
+	};
+	fragment@2 {
+		target = "/";
+		__overlay__ {
+			backlight_gpio: backlight_gpio {
+				compatible = "gpio-backlight";
+				
+				gpios = <&gpio 24 GPIO_ACTIVE_HIGH>;
+				default-on;
+			};
+		};
+	};
+	
+	fragment@3 {
+		target-path = "/";
+		__overlay__ {
+			vdd_3v3: panel-power {
+				compatible = "regulator-fixed";
+				regulator-name = "panel-3v3";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+			};
+		};
+	};
+	
 };

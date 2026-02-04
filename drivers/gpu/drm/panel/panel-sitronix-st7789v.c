@@ -458,7 +458,7 @@ static int st7789v_prepare(struct drm_panel *panel)
 	/* We need to wait 120ms after a sleep out command */
 	msleep(120);
 
-	bool is_vw = device_is_compatible(panel->dev, "waveshare,st7789vw-240x240");
+	bool is_vw = device_is_compatible(panel->dev, "waveshare,st7789vw");
 
 	/* ST7789VW should write 0x70 instead of writing 0. */
 	ST7789V_TEST(ret, st7789v_write_command(ctx,
@@ -721,7 +721,7 @@ static int st7789v_probe(struct spi_device *spi)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get reset line\n");
 	
-	ctx->dc = devm_gpiod_get_optional(dev, "dc-gpios", GPIOD_OUT_HIGH);
+	ctx->dc = devm_gpiod_get_optional(dev, "dc", GPIOD_OUT_HIGH);
 	ret = PTR_ERR_OR_ZERO(ctx->dc);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get dc line\n");
@@ -767,7 +767,7 @@ static const struct spi_device_id st7789v_spi_id[] = {
 	{ "t28cp45tn89-v17", (unsigned long) &t28cp45tn89_panel },
 	{ "et028013dma", (unsigned long) &et028013dma_panel },
 	{ "jt240mhqs-hwt-ek-e3", (unsigned long) &jt240mhqs_hwt_ek_e3_panel },
-	{ "st7789vw-240x240", (unsigned long) &st7789vw_panel },
+	{ "st7789vw", (unsigned long) &st7789vw_panel },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, st7789v_spi_id);
@@ -779,7 +779,7 @@ static const struct of_device_id st7789v_of_match[] = {
 	{ .compatible = "jasonic,jt240mhqs-hwt-ek-e3",
 	  .data = &jt240mhqs_hwt_ek_e3_panel },
 	{
-	  .compatible = "waveshare,st7789vw-240x240",
+	  .compatible = "waveshare,st7789vw",
 	  .data = &st7789vw_panel
 	},
 	{ }
