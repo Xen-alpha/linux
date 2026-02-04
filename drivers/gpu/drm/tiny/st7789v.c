@@ -190,7 +190,7 @@ static const struct drm_simple_display_pipe_funcs st7789v_pipe_funcs = {
 DEFINE_DRM_GEM_DMA_FOPS(st7789v_fops);
 
 static const struct drm_driver st7789v_driver = {
-	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
+	.driver_features	= DRIVER_GEM | DRIVER_MODESET,
 	.fops			= &st7789v_fops,
 	DRM_GEM_DMA_DRIVER_OPS_VMAP,
 	.debugfs_init		= mipi_dbi_debugfs_init,
@@ -222,9 +222,10 @@ static int st7789v_probe(struct spi_device *spi)
 	struct gpio_desc *dc;
 	int ret;
 	u32 rotation = 0;
+	static u8 txbuf[4096];
 	
 
-	cfg = devm_kzalloc(dev, sizeof(*cfg), GFP_KERNEL);
+	cfg = devm_drm_dev_alloc(dev, &st7789v_driver, struct st7789v_cfg, dbidev.drm);
 	if (IS_ERR(cfg))
 		return dev_err_probe(dev, PTR_ERR(cfg), "Failed to get memory area for st7789v context\n");
 
@@ -233,11 +234,14 @@ static int st7789v_probe(struct spi_device *spi)
 	dbi = &dbidev->dbi;
 	drm = &dbidev->drm;
 	
+	drm->driver = &st7789v_driver;
+	drm->dev = dev;
+
 	dbi->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(dbi->reset))
 		return dev_err_probe(dev, PTR_ERR(dbi->reset), "Failed to get GPIO 'reset'\n");
 
-	dc = devm_gpiod_get(dev, "dc", GPIOD_OUT_LOW);
+	dc = devm_gpiod_get(dev, "dc-gpios", GPIOD_OUT_LOW);
 	if (IS_ERR(dc))
 		return dev_err_probe(dev, PTR_ERR(dc), "Failed to get GPIO 'dc'\n");
 	
@@ -251,19 +255,24 @@ static int st7789v_probe(struct spi_device *spi)
 	// pr_info("st7789v: cfg=%p\n", cfg);
 	// pr_info("st7789v: spi=%p\n", spi);
 
-	ret = mipi_dbi_spi_init(spi, dbi, NULL);
+	ret = mipi_dbi_spi_init(spi, dbi,dc);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to init mipi spi for st7789v\n");
 	
 	cfg->mode = st7789vw_mode; // TODO: use switch statement to select display mode for other lcd controllers
 	
 	//pr_info("st7789v: return value of mipi_dbi_spi_init=%d\n", ret);
-	pr_info("st7789v: dbidev.drm.dev=%p\n", cfg->dbidev.drm.dev);
 	pr_info("st7789v: dbidev.dbi.spi=%p\n", cfg->dbidev.dbi.spi);
 
+	drm_mode_config_init(drm);
+	
+	drm->mode_config.min_width = 240;
+	drm->mode_config.max_width = 240;
+	drm->mode_config.min_height = 240;
+	drm->mode_config.max_height = 240;
 
 	ret = mipi_dbi_dev_init(dbidev, &st7789v_pipe_funcs, &cfg->mode,
-				DRM_FORMAT_RGB565);
+				rotation);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to init mipi device st7789v\n");
 
@@ -272,9 +281,9 @@ static int st7789v_probe(struct spi_device *spi)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to register st7789v drm device\n");
 
-	spi_set_drvdata(spi, drm);
+	spi_set_drvdata(spi, dbidev);
 
-	pr_info("st7789v probe finished\n");
+	pr_info("st7789v probe finished with connector count=%d\n", drm->mode_config.num_connector);
 	return 0;
 	
 }
