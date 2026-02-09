@@ -11,8 +11,15 @@
 			status = "disabled";
 		};
 	};
-	
+
 	fragment@1 {
+		target = <&spidev1>;
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+	
+	fragment@2 {
 		target = <&spi0>;
 		__overlay__ {
 			status = "okay";
@@ -32,17 +39,6 @@
 				reset-gpios = <&gpio 27 GPIO_ACTIVE_LOW>;
 				backlight = <&backlight_gpio>;
 				
-			};
-		};
-	};
-	fragment@2 {
-		target = "/";
-		__overlay__ {
-			backlight_gpio: backlight_gpio {
-				compatible = "gpio-backlight";
-				
-				gpios = <&gpio 24 GPIO_ACTIVE_HIGH>;
-				default-on;
 			};
 		};
 	};

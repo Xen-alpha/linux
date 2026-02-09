@@ -90,7 +90,7 @@ static void st7789v_enable(struct drm_simple_display_pipe *pipe,
 	struct mipi_dbi *dbi = &dbidev->dbi;
 	int ret, idx;
 	
-	pr_info("enabling st7789v...\n");
+	//pr_info("enabling st7789v...\n");
 	
 	if (!drm_dev_enter(pipe->crtc.dev, &idx)) {
 		pr_err("cannot enter drm device for st7789v\n");
@@ -114,8 +114,8 @@ static void st7789v_enable(struct drm_simple_display_pipe *pipe,
 	
 	bool is_vw = device_is_compatible(dbidev->drm.dev, "waveshare,st7789vw");
 	
-	if (is_vw)
-		pr_info("st7789vw waveshare variant detected\n");
+	//if (is_vw)
+	//	pr_info("st7789vw waveshare variant detected\n");
 	
 	/* ST7789VW should write 0x70 instead of writing 0. */
 	if (is_vw)
@@ -172,7 +172,7 @@ static void st7789v_enable(struct drm_simple_display_pipe *pipe,
 
 	mipi_dbi_enable_flush(dbidev, crtc_state, plane_state);
 	
-	pr_info("enabled st7789v display drm\n");
+	// pr_info("enabled st7789v display drm\n");
 }
 
 static void st7789v_disable(struct drm_simple_display_pipe *pipe) {
@@ -222,7 +222,6 @@ static int st7789v_probe(struct spi_device *spi)
 	struct gpio_desc *dc;
 	int ret;
 	u32 rotation = 0;
-	static u8 txbuf[4096];
 	
 
 	cfg = devm_drm_dev_alloc(dev, &st7789v_driver, struct st7789v_cfg, dbidev.drm);
@@ -241,7 +240,7 @@ static int st7789v_probe(struct spi_device *spi)
 	if (IS_ERR(dbi->reset))
 		return dev_err_probe(dev, PTR_ERR(dbi->reset), "Failed to get GPIO 'reset'\n");
 
-	dc = devm_gpiod_get(dev, "dc-gpios", GPIOD_OUT_LOW);
+	dc = devm_gpiod_get(dev, "dc", GPIOD_OUT_LOW);
 	if (IS_ERR(dc))
 		return dev_err_probe(dev, PTR_ERR(dc), "Failed to get GPIO 'dc'\n");
 	
@@ -262,7 +261,7 @@ static int st7789v_probe(struct spi_device *spi)
 	cfg->mode = st7789vw_mode; // TODO: use switch statement to select display mode for other lcd controllers
 	
 	//pr_info("st7789v: return value of mipi_dbi_spi_init=%d\n", ret);
-	pr_info("st7789v: dbidev.dbi.spi=%p\n", cfg->dbidev.dbi.spi);
+	// pr_info("st7789v: dbidev.dbi.spi=%p\n", cfg->dbidev.dbi.spi);
 
 	drm_mode_config_init(drm);
 	
@@ -275,7 +274,7 @@ static int st7789v_probe(struct spi_device *spi)
 				rotation);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to init mipi device st7789v\n");
-
+	pr_info("connector=%p\n", &dbidev->connector);
 
 	ret = drm_dev_register(drm, 0);
 	if (ret)
@@ -283,7 +282,7 @@ static int st7789v_probe(struct spi_device *spi)
 
 	spi_set_drvdata(spi, dbidev);
 
-	pr_info("st7789v probe finished with connector count=%d\n", drm->mode_config.num_connector);
+	// pr_info("st7789v probe finished\n");
 	return 0;
 	
 }
