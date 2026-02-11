@@ -61,6 +61,7 @@
 
 struct st7789v_cfg {
 	const struct drm_display_mode mode;
+	
 };
 
 struct st7789v_priv {
@@ -98,7 +99,7 @@ static void st7789v_enable(struct drm_simple_display_pipe *pipe,
 	
 	// send reset command to st7789v
 	mipi_dbi_command(dbi, MIPI_DCS_EXIT_SLEEP_MODE);	
-	msleep(120); // sleep for 120ms
+	msleep(180); // sleep for 180ms
 	
 	bool is_vw = device_is_compatible(dbidev->drm.dev, "waveshare,st7789vw");
 	
@@ -154,26 +155,28 @@ static void st7789v_enable(struct drm_simple_display_pipe *pipe,
 	/* Negative gamma control */
 	mipi_dbi_command(dbi, ST7789V_NVGAMCTRL_CMD, 0x00, 0x18, 0x1e, 0x0a, 0x09, 0x25, 0x3f,
 												0x43, 0x52, 0x33, 0x03, 0x00, 0x3f, 0x3f);
+	
 	mipi_dbi_command(dbi, MIPI_DCS_SET_DISPLAY_ON);
 
-	msleep(100);
-	
-	mipi_dbi_command(dbi, MIPI_DCS_ENTER_NORMAL_MODE);
-	
 	msleep(20);
 
 	mipi_dbi_enable_flush(dbidev, crtc_state, plane_state);
 
+	msleep(20);
+
 	drm_dev_exit(idx);
-	// pr_info("enabled st7789v display drm\n");
+
+	msleep(20);
+
+	mipi_dbi_command(dbi, MIPI_DCS_SET_COLUMN_ADDRESS, 0x00, 0x00, 0x00, 0xEF);
+	mipi_dbi_command(dbi, MIPI_DCS_SET_PAGE_ADDRESS, 0x00, 0x00, 0x00, 0xEF);
+
+	msleep(20);
+
+	pr_info("enabled st7789v display drm\n");
+
 }
-/*
-static void st7789v_disable(struct drm_simple_display_pipe *pipe) {
-	struct mipi_dbi_dev *dbidev = drm_to_mipi_dbi_dev(pipe->crtc.dev);
-	pr_info("disabling st7789v drm...\n");
-	mipi_dbi_command(&dbidev->dbi, MIPI_DCS_SET_DISPLAY_OFF);
-}
-*/
+
 static const struct drm_simple_display_pipe_funcs st7789v_pipe_funcs = {
 	DRM_MIPI_DBI_SIMPLE_DISPLAY_PIPE_FUNCS(st7789v_enable),
 };
@@ -206,6 +209,11 @@ static const struct spi_device_id st7789v_id[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, st7789v_id);
+
+static const uint32_t st7789v_formats[] = {
+	DRM_FORMAT_RGB565,
+	DRM_FORMAT_XRGB8888,
+};
 
 static int st7789v_probe(struct spi_device *spi)
 {
@@ -256,8 +264,10 @@ static int st7789v_probe(struct spi_device *spi)
 	
 	//pr_info("st7789v: drm.dev=%p spi=%p dc=%p\n", dbidev->drm.dev, dbidev->dbi.spi, dbidev->dbi.dc);
 
-	ret = mipi_dbi_dev_init(dbidev, &st7789v_pipe_funcs, &cfg->mode,
-				rotation);
+	dbidev->left_offset = 0;
+	dbidev->top_offset = 0;
+
+	ret = mipi_dbi_dev_init_with_formats(dbidev, &st7789v_pipe_funcs, st7789v_formats, ARRAY_SIZE(st7789v_formats), &cfg->mode, rotation, 240 * 240 * 2);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to init mipi device st7789v\n");
 	//pr_info("connector=%p\n", &dbidev->connector);
@@ -271,7 +281,7 @@ static int st7789v_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, drm);
 	
 	drm_fbdev_dma_setup(drm,0);
-	pr_info("st7789v probe finished\n");
+	// pr_info("st7789v probe finished\n");
 	return 0;
 	
 }
