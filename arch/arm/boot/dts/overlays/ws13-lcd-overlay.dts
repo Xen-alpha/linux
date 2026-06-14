@@ -1,0 +1,149 @@
+/*
+ * Device Tree overlay for the Waveshare 1.3inch IPS LCD HAT
+ *
+ * Display : ST7789VW, SPI0/CE0, DC=GPIO25, RESET=GPIO27, BL=GPIO24
+ * Inputs  : KEY1=GPIO21 KEY2=GPIO20 KEY3=GPIO16
+ *           Joystick UP=6 DOWN=19 LEFT=5 RIGHT=26 PRESS=13
+ *           (all buttons short to GND -> active low, internal pull-ups)
+ *
+ * Build:
+ *   dtc -@ -I dts -O dtb -o ws13-lcd.dtbo ws13-lcd-overlay.dts
+ * Install:
+ *   sudo cp ws13-lcd.dtbo /boot/firmware/overlays/
+ *   echo "dtoverlay=ws13-lcd" | sudo tee -a /boot/firmware/config.txt
+ * Parameters:
+ *   dtoverlay=ws13-lcd,rotation=180,speed=40000000
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	/* Enable the SPI0 controller */
+	fragment@0 {
+		target = <&spi0>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	/* spidev would otherwise claim CE0 */
+	fragment@1 {
+		target = <&spidev0>;
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	/* Pin states: DC/RESET as outputs, all keys input + pull-up */
+	fragment@2 {
+		target = <&gpio>;
+		__overlay__ {
+			ws13_lcd_pins: ws13_lcd_pins {
+				brcm,pins = <25 27>;
+				brcm,function = <1 1>;	/* output */
+			};
+			ws13_key_pins: ws13_key_pins {
+				brcm,pins = <21 20 16 6 19 5 26 13>;
+				brcm,function = <0 0 0 0 0 0 0 0>; /* input */
+				brcm,pull     = <2 2 2 2 2 2 2 2>; /* pull-up */
+			};
+		};
+	};
+
+	/* The panel itself */
+	fragment@3 {
+		target = <&spi0>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ws13: ws13-lcd@0 {
+				compatible = "waveshare,ws13-lcd";
+				reg = <0>;	/* CE0 */
+				pinctrl-names = "default";
+				pinctrl-0 = <&ws13_lcd_pins>;
+
+				/*
+				 * ST7789VW serial write cycle min 16 ns
+				 * => 62.5 MHz theoretical max.
+				 * 40 MHz is a comfortable margin on the
+				 * Pi's SPI0 clock dividers.
+				 */
+				spi-max-frequency = <40000000>;
+
+				dc-gpios    = <&gpio 25 0>;	/* active high */
+				reset-gpios = <&gpio 27 1>;	/* active low  */
+				backlight   = <&ws13_backlight>;
+				rotation    = <0>;
+			};
+		};
+	};
+
+	/* Backlight (simple on/off via GPIO24) and the input devices */
+	fragment@4 {
+		target-path = "/";
+		__overlay__ {
+			ws13_backlight: ws13_backlight {
+				compatible = "gpio-backlight";
+				gpios = <&gpio 24 0>;
+				default-on;
+			};
+
+			ws13_keys: ws13-keys {
+				compatible = "gpio-keys";
+				pinctrl-names = "default";
+				pinctrl-0 = <&ws13_key_pins>;
+				autorepeat;
+
+				key1 {
+					label = "WS13 KEY1";
+					linux,code = <30>;		/* KEY_A */
+					gpios = <&gpio 21 1>;		/* active low */
+				};
+				key2 {
+					label = "WS13 KEY2";
+					linux,code = <48>;		/* KEY_B */
+					gpios = <&gpio 20 1>;
+				};
+				key3 {
+					label = "WS13 KEY3";
+					linux,code = <46>;		/* KEY_C */
+					gpios = <&gpio 16 1>;
+				};
+				joy-up {
+					label = "WS13 Joystick Up";
+					linux,code = <103>;		/* KEY_UP */
+					gpios = <&gpio 6 1>;
+				};
+				joy-down {
+					label = "WS13 Joystick Down";
+					linux,code = <108>;		/* KEY_DOWN */
+					gpios = <&gpio 19 1>;
+				};
+				joy-left {
+					label = "WS13 Joystick Left";
+					linux,code = <105>;		/* KEY_LEFT */
+					gpios = <&gpio 5 1>;
+				};
+				joy-right {
+					label = "WS13 Joystick Right";
+					linux,code = <106>;		/* KEY_RIGHT */
+					gpios = <&gpio 26 1>;
+				};
+				joy-press {
+					label = "WS13 Joystick Press";
+					linux,code = <28>;		/* KEY_ENTER */
+					gpios = <&gpio 13 1>;
+				};
+			};
+		};
+	};
+
+	__overrides__ {
+		rotation = <&ws13>, "rotation:0";
+		speed    = <&ws13>, "spi-max-frequency:0";
+	};
+};
