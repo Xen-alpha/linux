@@ -271,10 +271,10 @@ static int ws13_probe(struct spi_device *spi)
 	 *   270 deg (MV=1,MX=1) -> CASET must start at line 80
 	 */
 	switch (dbidev->rotation) {
-	case 180:
+	case 0:
 		dbidev->top_offset = WS13_LINE_OFFSET;
 		break;
-	case 270:
+	case 90:
 		dbidev->left_offset = WS13_LINE_OFFSET;
 		break;
 	}
@@ -288,11 +288,11 @@ static int ws13_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, drm);
 
 #if defined(WS13_FBDEV_CLIENT_SETUP)
-	drm_client_setup(drm, NULL);
+	drm_client_setup_with_fourcc(drm, DRM_FORMAT_RGB565);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
-	drm_fbdev_dma_setup(drm, 0);
+	drm_fbdev_dma_setup(drm, 16);
 #else
-	drm_fbdev_generic_setup(drm, 0);
+	drm_fbdev_generic_setup(drm, 16);
 #endif
 
 	dev_info(dev, "ST7789VW 240x240 initialised, rotation=%u, %u kHz\n",
