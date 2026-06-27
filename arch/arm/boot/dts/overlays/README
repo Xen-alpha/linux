@@ -6277,6 +6277,16 @@ Params: alsaname                Changes the card name in ALSA
         compatible              Changes the codec compatibility
 
 
+Name:	ws13-lcd
+Info:	Waveshare 1.3inch 240x240 IPS LCD HAT (ST7789VW Controller) for 
+		Raspberry Pi, using the DRM/KMS mipi-dbi based driver. Provides a
+		/dev/dri card and fbdev emulation but no dual monitor output. Also exposes the on-board joystick
+		and three buttons as a gpio-keys input device.
+		Wiring (BCM): DC=25, RESET=27, Backlight=24, CS=CE0, SPI0.
+Load:	dtoverlay=ws13-lcd,<param>=<val>
+Params:	rotation				Display rotation in degrees: 0, 90, 180, 270.
+		speed					SPI bus speed in Hz(default: 40000000).
+
 Name:   ws2812-pio
 Info:   Configures a GPIO pin to drive a string of WS2812 LEDS using pio. It
         can be enabled on any RP1 GPIO in bank 0 (0-27). Up to 4 are supported,
